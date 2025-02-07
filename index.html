@@ -2,22 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Fully Enhanced JSON Conversation Viewer</title>
+  <title>Improved JSON Conversation Viewer</title>
   <style>
-    /* Global Resets and Smooth Scrolling */
+    /* --- Global Resets and Layout --- */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: Arial, sans-serif;
       scroll-behavior: smooth;
+      box-sizing: border-box;
     }
-    /* Container for Sidebar and Main Content */
+    *, *:before, *:after {
+      box-sizing: inherit;
+    }
     #container {
       display: flex;
       height: 100vh;
+      overflow: hidden;
     }
-    /* Sidebar Styles */
+    
+    /* --- Sidebar Styles --- */
     #sidebar {
       width: 250px;
       border-right: 1px solid #ccc;
@@ -27,13 +32,17 @@
     }
     #sidebar h2 {
       margin-top: 0;
-      font-size: 1.2em;
+      font-size: 1.1em;
+      margin-bottom: 0.5em;
     }
-    /* Navigation List Styling (Hierarchical, Collapsible) */
     #navList {
       list-style: none;
       padding-left: 0;
       margin: 0;
+    }
+    #navList li {
+      margin: 0;
+      padding: 0;
     }
     #navList li a {
       text-decoration: none;
@@ -45,27 +54,26 @@
     #navList li a.active {
       background-color: #d3d3d3;
     }
-    /* Global Navigation Nested UL styling */
+    /* Nested UL in sidebar collapses. We keep it simpler. */
     #navList ul {
       list-style: none;
       padding-left: 15px;
       margin: 0;
-      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
     }
     #navList ul.hidden {
       max-height: 0;
       opacity: 0;
       overflow: hidden;
     }
-    /* Main Content Styles */
+
+    /* --- Main Content Area --- */
     #main {
-      flex-grow: 1;
+      flex: 1;
       padding: 10px;
       overflow-y: auto;
-      height: 100%;
       position: relative;
     }
-    /* Global Buttons Container */
     #globalButtons {
       margin-bottom: 10px;
     }
@@ -75,7 +83,8 @@
       font-size: 0.9em;
       cursor: pointer;
     }
-    /* Conversation Container Styling */
+
+    /* --- Conversation Container --- */
     .conversation {
       border: 1px solid #ccc;
       margin: 15px 0;
@@ -85,509 +94,507 @@
     }
     .conversation h2 {
       margin-top: 0;
-      font-size: 1.2em;
+      font-size: 1.1em;
     }
     .conversation p.timestamp {
       font-size: 0.85em;
       color: #666;
-      margin: 2px 0 8px 0;
+      margin: 3px 0 10px;
     }
-    /* Tree View Styles for Conversation Mapping */
+
+    /* --- Tree View --- */
     ul.tree {
       list-style-type: none;
-      margin-left: 20px;
-      padding-left: 0;
-      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+      padding-left: 1rem; /* minimal indentation for the entire tree */
+      margin-left: 0;
+      margin-top: 0.5rem;
     }
-    /* Nested UL gets a dashed left border to indicate threading */
-    ul.tree ul {
-      border-left: 2px dashed #ccc;
-      margin-left: 10px;
-      padding-left: 10px;
-      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
-    }
+    /* Each node in the tree */
     li.tree {
-      margin: 5px 0;
       position: relative;
+      margin: 0.2em 0 0.8em 0;
+      padding: 0 0 0 1.2em;
+      border-left: 2px solid #ccc; /* a vertical line indicating the tree connection */
+    }
+    /* A connecting line that extends upward to link the current node to parent. */
+    li.tree::before {
+      content: "";
+      position: absolute;
+      left: -2px; /* align with the border-left of li */
+      top: 0;
+      height: 1em; /* small vertical line from parent to this node */
+      width: 2px;
+      background-color: #ccc;
+    }
+    /* The toggle arrow icons */
+    li.tree.toggle::after {
+      content: "▸";
+      position: absolute;
+      left: -1.2em;
+      top: 0.2em;
       cursor: pointer;
-      /* Ensure proper text wrapping in the li as well */
-      overflow-wrap: break-word;
-      word-wrap: break-word;
-      word-break: break-word;
-      max-width: 600px;
-    }
-    .node-title {
-      font-weight: bold;
-      display: inline-block;
-    }
-    .node-content {
       font-size: 0.9em;
-      color: #555;
-      margin: 5px 0;
-      overflow-wrap: break-word;
-      word-wrap: break-word;
-      word-break: break-word;
-      max-width: 600px;
+      color: #666;
+      transition: transform 0.3s;
     }
-    /* Toggle Icons for Expandable Nodes */
-    li.tree.toggle::before {
-      content: "▸ ";
-      display: inline-block;
-      width: 1em;
-      transition: transform 0.3s ease;
-    }
-    li.tree.expanded::before {
-      content: "▾ ";
+    li.tree.expanded::after {
+      content: "▾";
       transform: rotate(0deg);
     }
-    /* Hide Nested Lists by Default */
-    .hidden {
-      display: none;
+
+    /* Author/ID labeling above or near content */
+    .node-meta {
+      font-size: 0.85em;
+      color: #666;
+      margin-bottom: 0.2em;
     }
-    /* Copy Button Styling */
+    .node-content {
+      background-color: #fafafa;
+      border-radius: 4px;
+      padding: 6px 8px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
     .copy-button {
-      margin-left: 10px;
-      padding: 2px 5px;
+      margin-left: 8px;
       font-size: 0.8em;
+      padding: 2px 5px;
       cursor: pointer;
     }
-    /* Message Type Styles */
-    .message-system {
-      background-color: #f0f8ff;
+
+    /* --- Message Role Coloring --- */
+    .message-system .node-content {
+      background-color: #f0f8ff; /* light bluish */
     }
-    .message-user {
-      background-color: #f9f9f9;
+    .message-user .node-content {
+      background-color: #e6ffe6; /* very pale green */
     }
-    .message-assistant {
-      background-color: #fffbe6;
+    .message-assistant .node-content {
+      background-color: #fffbe6; /* pale yellowish */
     }
-    /* Spinner/Loading Indicator */
+
+    /* Loading spinner for lazy-load. Hidden by default. */
     .loading-spinner {
-      font-size: 0.9em;
+      display: none;
+      margin-left: 8px;
+      font-size: 0.8em;
       color: #888;
-      margin-left: 10px;
     }
   </style>
+
   <!-- Marked.js for Markdown Rendering -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-  <div id="container">
-    <!-- Navigation Sidebar -->
-    <div id="sidebar">
-      <h2>Navigation</h2>
-      <ul id="navList"></ul>
-    </div>
-    <!-- Main Content Area -->
-    <div id="main">
-      <div id="globalButtons">
-        <button id="expandAllButton">Expand All</button>
-        <button id="collapseAllButton">Collapse All</button>
-      </div>
-      <input type="file" id="fileInput" accept=".json" />
-      <div id="output"></div>
-    </div>
+<div id="container">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h2>Navigation</h2>
+    <ul id="navList"></ul>
   </div>
+  
+  <!-- Main Content -->
+  <div id="main">
+    <div id="globalButtons">
+      <button id="expandAllButton">Expand All</button>
+      <button id="collapseAllButton">Collapse All</button>
+    </div>
+    <input type="file" id="fileInput" accept=".json" />
+    <div id="output"></div>
+  </div>
+</div>
 
-  <script>
-    /***************** Global Variables and Navigation Setup *****************/
-    const navRoot = document.getElementById('navList');
-    let navStack = [{ level: 0, element: navRoot }];
+<script>
+/********************************************************************
+ * 1. SIDEBAR NAVIGATION
+ ********************************************************************/
+const navRoot = document.getElementById('navList');
+let navStack = [{ level: 0, element: navRoot }];
 
-    function resetNavStack() {
-      navStack = [{ level: 0, element: navRoot }];
-      navRoot.innerHTML = "";
+function resetNavStack() {
+  navStack = [{ level: 0, element: navRoot }];
+  navRoot.innerHTML = "";
+}
+
+/**
+ * Adds a navigation item (like a table of contents) in the left sidebar.
+ */
+function registerNavItem(title, targetId, level = 1) {
+  const li = document.createElement('li');
+  const link = document.createElement('a');
+  link.href = "#" + targetId;
+  link.textContent = title;
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    // Remove active state from all links
+    navRoot.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+    document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
+    
+    // Toggle nested items if any
+    const nested = li.querySelector('ul');
+    if (nested) {
+      nested.classList.toggle('hidden');
     }
+  });
+  li.appendChild(link);
 
-    /**
-     * Registers a navigation item in the sidebar.
-     * Builds a nested, collapsible tree in the sidebar.
-     * @param {string} title - The text to display.
-     * @param {string} targetId - The id of the element to navigate to.
-     * @param {number} level - Header level for indentation.
-     */
-    function registerNavItem(title, targetId, level = 1) {
-      const li = document.createElement('li');
-      li.style.listStyle = 'none';
-      li.style.marginLeft = ((level - 1) * 15) + "px";
-      const link = document.createElement('a');
-      link.href = "#" + targetId;
-      link.textContent = title;
-      link.style.textDecoration = "none";
-      link.style.color = "#333";
-      link.style.display = "block";
-      link.style.padding = "4px 8px";
-      link.style.borderRadius = "4px";
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
-        // Remove active state from all links
-        navRoot.querySelectorAll('a').forEach(a => a.classList.remove('active'));
-        link.classList.add('active');
-        document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
-        // If the nav item has nested children, toggle them
-        const nested = li.querySelector('ul');
-        if (nested) {
-          nested.classList.toggle('hidden');
-        }
+  // Adjust navStack to insert item at the correct hierarchy
+  while (navStack.length && navStack[navStack.length - 1].level >= level) {
+    navStack.pop();
+  }
+  const parentObj = navStack[navStack.length - 1];
+  parentObj.element.appendChild(li);
+
+  // Create a nested <ul> for children
+  const childUl = document.createElement('ul');
+  childUl.classList.add('hidden');
+  li.appendChild(childUl);
+  navStack.push({ level: level, element: childUl });
+}
+
+/********************************************************************
+ * 2. TREE BUILDING & DISPLAY
+ ********************************************************************/
+
+/**
+ * Creates a <li> element for a node in the conversation tree.
+ */
+function createNodeElement(node, mapping) {
+  const li = document.createElement('li');
+  li.classList.add('tree');
+  li.id = "node_" + node.id;
+  
+  // Mark the message role if known
+  if (node.message && node.message.author && node.message.author.role) {
+    li.classList.add('message-' + node.message.author.role);
+  }
+  
+  // Toggling: if children exist, mark it "toggle"
+  if (node.children && node.children.length > 0) {
+    li.classList.add('toggle');
+    li.dataset.expanded = "false";
+  }
+
+  // Build the meta row (e.g. role, ID)
+  const metaDiv = document.createElement('div');
+  metaDiv.classList.add('node-meta');
+  if (node.message && node.message.author && node.message.author.role) {
+    metaDiv.textContent = `[${node.message.author.role}]`;  
+  } else {
+    metaDiv.textContent = `[unknown role]`;
+  }
+  
+  // Optionally show full ID in a small label or as a tooltip
+  // Here we show it in parentheses after the role:
+  const idSpan = document.createElement('span');
+  idSpan.style.color = "#999";
+  idSpan.style.marginLeft = "0.5em";
+  idSpan.textContent = `(ID: ${node.id})`;
+  metaDiv.appendChild(idSpan);
+
+  // Build the content
+  let contentDiv = null;
+  if (node.message && node.message.content && node.message.content.parts) {
+    const rawText = node.message.content.parts.join("\n\n").trim();
+    if (rawText) {
+      contentDiv = document.createElement('div');
+      contentDiv.classList.add('node-content');
+      contentDiv.innerHTML = marked.parse(rawText);
+
+      // Copy button
+      const copyButton = document.createElement('button');
+      copyButton.classList.add('copy-button');
+      copyButton.textContent = "Copy";
+      copyButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(rawText)
+          .then(() => alert("Copied!"))
+          .catch(err => alert("Error copying text: " + err));
       });
-      li.appendChild(link);
-
-      // Adjust navStack to insert item properly in hierarchy
-      while (navStack.length > 0 && navStack[navStack.length - 1].level >= level) {
-        navStack.pop();
-      }
-      const parentObj = navStack[navStack.length - 1];
-      parentObj.element.appendChild(li);
-
-      // Create a nested <ul> for children and push it onto navStack
-      const childUl = document.createElement('ul');
-      childUl.style.listStyle = 'none';
-      childUl.style.paddingLeft = '10px';
-      childUl.classList.add('hidden');
-      li.appendChild(childUl);
-      navStack.push({ level: level, element: childUl });
+      contentDiv.appendChild(copyButton);
     }
+  }
 
-    /**
-     * Utility function to truncate long IDs.
-     * @param {string} id - The full node id.
-     * @returns {string} Truncated id.
-     */
-    function truncateId(id) {
-      return id.length > 8 ? id.substring(0, 8) + '...' : id;
-    }
+  // Append meta and content to li
+  li.appendChild(metaDiv);
+  if (contentDiv) {
+    li.appendChild(contentDiv);
+  }
 
-    /***************** Node Creation and Lazy Loading *****************/
-    /**
-     * Recursively creates a <li> element for a conversation node.
-     * Implements lazy loading so children are built only on expansion.
-     * Differentiates message types with CSS classes.
-     * @param {Object} node - A node from the mapping.
-     * @param {Object} mapping - The complete mapping of nodes.
-     * @returns {HTMLElement} The <li> element representing this node.
-     */
-    function createNodeElement(node, mapping) {
-      const li = document.createElement('li');
-      li.classList.add('tree');
-      li.id = "node_" + node.id;
+  // Children container (hidden by default)
+  const ul = document.createElement('ul');
+  ul.classList.add('tree');
+  ul.style.display = 'none';
+  li.appendChild(ul);
 
-      // Differentiate message types based on author role.
-      if (node.message && node.message.author && node.message.author.role) {
-        li.classList.add('message-' + node.message.author.role);
-      }
+  // Loading spinner for lazy loading
+  const spinner = document.createElement('span');
+  spinner.classList.add('loading-spinner');
+  spinner.textContent = "Loading...";
+  li.appendChild(spinner);
 
-      // Create span for the node title.
-      const titleSpan = document.createElement('span');
-      titleSpan.classList.add('node-title');
-      titleSpan.textContent = truncateId(node.id);
-      li.appendChild(titleSpan);
-
-      // Process message content (if available).
-      if (node.message && node.message.content && node.message.content.parts) {
-        const rawText = node.message.content.parts.join(" ").trim();
-        if (rawText) {
-          const contentDiv = document.createElement('div');
-          contentDiv.classList.add('node-content');
-          contentDiv.innerHTML = marked.parse(rawText);
-          li.appendChild(contentDiv);
-
-          // Add Copy button to copy raw Markdown.
-          const copyButton = document.createElement('button');
-          copyButton.classList.add('copy-button');
-          copyButton.textContent = "Copy";
-          copyButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            navigator.clipboard.writeText(rawText)
-              .then(() => alert("Copied!"))
-              .catch(err => alert("Error copying text: " + err));
-          });
-          li.appendChild(copyButton);
-
-          // If raw text begins with a Markdown header, update title and register nav item.
-          const headerMatch = rawText.match(/^(#{1,6})\s+(.*)/);
-          if (headerMatch) {
-            const headerLevel = headerMatch[1].length;
-            const headerTitle = headerMatch[2].trim();
-            titleSpan.textContent = headerTitle;
-            registerNavItem(headerTitle, li.id, headerLevel);
-          }
-        }
-      }
-
-      // Lazy-load children only when node is expanded.
-      if (node.children && node.children.length > 0) {
-        li.classList.add('toggle');
-        const ul = document.createElement('ul');
-        ul.classList.add('hidden');
-        li.appendChild(ul);
-        li.dataset.expanded = "false";
-        // Optional loading spinner element.
-        const spinner = document.createElement('span');
-        spinner.classList.add('loading-spinner');
-        spinner.textContent = "Loading...";
-        spinner.style.display = "none";
-        li.appendChild(spinner);
-        
-        li.loadChildren = function() {
-          if (li.dataset.expanded === "false") {
-            spinner.style.display = "inline";
-            // Use setTimeout to simulate asynchronous loading and batch DOM updates.
-            setTimeout(() => {
-              node.children.forEach(childId => {
-                const childNode = mapping[childId];
-                if (childNode) {
-                  ul.appendChild(createNodeElement(childNode, mapping));
-                }
-              });
-              li.dataset.expanded = "true";
-              spinner.style.display = "none";
-            }, 50);
-          }
-        };
-
-        // Toggle expansion on clicking the title.
-        titleSpan.addEventListener('click', function(e) {
-          e.stopPropagation();
-          // Load children if not already loaded.
-          if (li.dataset.expanded === "false") {
-            li.loadChildren();
-          }
-          if (ul.classList.contains('hidden')) {
-            ul.classList.remove('hidden');
-            li.classList.add('expanded');
-          } else {
-            ul.classList.add('hidden');
-            li.classList.remove('expanded');
+  // Lazy-loading function
+  li.loadChildren = function() {
+    if (li.dataset.expanded === "false") {
+      spinner.style.display = "inline";
+      setTimeout(() => {
+        (node.children || []).forEach(childId => {
+          const childNode = mapping[childId];
+          if (childNode) {
+            ul.appendChild(createNodeElement(childNode, mapping));
           }
         });
-      }
-      return li;
+        li.dataset.expanded = "true";
+        spinner.style.display = "none";
+      }, 30);
     }
+  };
 
-    /***************** Recursive Expand/Collapse Functions *****************/
-    /**
-     * Recursively expands a node element and all its children.
-     * Uses asynchronous batching to avoid UI freezing on large trees.
-     * @param {HTMLElement} nodeElement - The DOM element representing a node.
-     * @param {Function} callback - Optional callback when expansion is complete.
-     */
-    function recursiveExpand(nodeElement, callback) {
-      // If nodeElement is expandable, process its children.
-      const ul = nodeElement.querySelector('ul');
-      if (ul) {
-        // Load children if not yet loaded.
-        if (typeof nodeElement.loadChildren === "function" && nodeElement.dataset.expanded === "false") {
-          nodeElement.loadChildren();
-        }
-        // Expand the current node.
-        ul.classList.remove('hidden');
-        nodeElement.classList.add('expanded');
-        nodeElement.dataset.expanded = "true";
-        // Process each child node asynchronously.
-        const children = ul.querySelectorAll(':scope > li.tree');
-        let i = 0;
-        function expandNext() {
-          if (i < children.length) {
-            recursiveExpand(children[i], () => {
-              i++;
-              requestAnimationFrame(expandNext);
-            });
-          } else {
-            if (callback) callback();
-          }
-        }
-        expandNext();
+  // Toggle on arrow click
+  li.addEventListener('click', function(e) {
+    // Only trigger if clicked on the arrow or the label area,
+    // but not if the user is hitting "Copy" button or content links
+    if (e.target.classList.contains('copy-button') || e.target.tagName === 'A') {
+      return; // ignore
+    }
+    if (node.children && node.children.length > 0) {
+      // Lazy load if not expanded
+      if (li.dataset.expanded === "false") {
+        li.loadChildren();
+      }
+      // Toggle display
+      if (ul.style.display === 'none') {
+        ul.style.display = 'block';
+        li.classList.add('expanded');
       } else {
-        if (callback) callback();
+        ul.style.display = 'none';
+        li.classList.remove('expanded');
       }
     }
+  });
+  
+  return li;
+}
 
-    /**
-     * Recursively collapses a node element and all its children.
-     * @param {HTMLElement} nodeElement - The DOM element representing a node.
-     * @param {Function} callback - Optional callback when collapse is complete.
-     */
-    function recursiveCollapse(nodeElement, callback) {
-      const ul = nodeElement.querySelector('ul');
-      if (ul) {
-        const children = ul.querySelectorAll(':scope > li.tree');
-        let i = 0;
-        function collapseNext() {
-          if (i < children.length) {
-            recursiveCollapse(children[i], () => {
-              i++;
-              requestAnimationFrame(collapseNext);
-            });
-          } else {
-            // Collapse current node.
-            ul.classList.add('hidden');
-            nodeElement.classList.remove('expanded');
-            nodeElement.dataset.expanded = "false";
-            if (callback) callback();
-          }
-        }
-        collapseNext();
-      } else {
-        if (callback) callback();
-      }
+/**
+ * Renders a mapping object (the entire conversation tree).
+ */
+function renderMappingTree(mapping) {
+  // Identify root nodes (parent === null)
+  const rootNodes = [];
+  for (const key in mapping) {
+    if (mapping[key].parent === null) {
+      rootNodes.push(mapping[key]);
     }
+  }
+  const rootUL = document.createElement('ul');
+  rootUL.classList.add('tree');
+  rootNodes.forEach(root => {
+    rootUL.appendChild(createNodeElement(root, mapping));
+  });
+  return rootUL;
+}
 
-    /**
-     * Global function to expand all nodes in the conversation tree.
-     * Traverses all root nodes and recursively expands each branch.
-     */
-    function expandAll() {
-      const rootNodes = document.querySelectorAll('#output > .conversation');
-      let pending = 0;
-      rootNodes.forEach(conv => {
-        const tree = conv.querySelector('ul.tree');
-        if (tree) {
-          // Expand each direct child node of the tree.
-          const nodes = tree.querySelectorAll('li.tree');
-          pending += nodes.length;
-          nodes.forEach(node => {
-            recursiveExpand(node, () => {
-              pending--;
-            });
-          });
-        }
+/********************************************************************
+ * 3. CONVERSATION RENDERING
+ ********************************************************************/
+function renderConversation(conversation, index) {
+  const container = document.createElement('div');
+  container.classList.add('conversation');
+  const convId = "conversation_" + index;
+  container.id = convId;
+
+  // Title
+  const header = document.createElement('h2');
+  header.textContent = conversation.title || "Untitled Conversation";
+  container.appendChild(header);
+
+  // Register in sidebar navigation
+  registerNavItem(header.textContent, convId, 1);
+
+  // Timestamp
+  if (conversation.create_time) {
+    const timeP = document.createElement('p');
+    timeP.classList.add('timestamp');
+    const date = new Date(conversation.create_time * 1000);
+    timeP.textContent = "Created at: " + date.toLocaleString();
+    container.appendChild(timeP);
+  }
+
+  // Mapping Tree
+  if (conversation.mapping) {
+    container.appendChild(renderMappingTree(conversation.mapping));
+  } else {
+    const noData = document.createElement('p');
+    noData.textContent = "No mapping data available.";
+    container.appendChild(noData);
+  }
+
+  return container;
+}
+
+/********************************************************************
+ * 4. EXPAND/COLLAPSE ALL
+ ********************************************************************/
+
+/**
+ * Recursively expand a node (and its children).
+ */
+function expandNode(nodeElement, callback) {
+  if (!nodeElement.classList.contains('tree')) {
+    if (callback) callback();
+    return;
+  }
+  const ul = nodeElement.querySelector(':scope > ul.tree');
+  if (!ul) {
+    if (callback) callback();
+    return;
+  }
+  // Lazy load children if not expanded
+  if (nodeElement.dataset.expanded === "false" && typeof nodeElement.loadChildren === "function") {
+    nodeElement.loadChildren();
+  }
+  // Show the UL
+  ul.style.display = 'block';
+  nodeElement.classList.add('expanded');
+  nodeElement.dataset.expanded = "true";
+
+  // Expand children
+  const childNodes = ul.querySelectorAll(':scope > li.tree');
+  let i = 0;
+  function nextChild() {
+    if (i < childNodes.length) {
+      expandNode(childNodes[i], () => {
+        i++;
+        requestAnimationFrame(nextChild);
+      });
+    } else if (callback) {
+      callback();
+    }
+  }
+  nextChild();
+}
+
+function collapseNode(nodeElement, callback) {
+  if (!nodeElement.classList.contains('tree')) {
+    if (callback) callback();
+    return;
+  }
+  const ul = nodeElement.querySelector(':scope > ul.tree');
+  if (!ul) {
+    if (callback) callback();
+    return;
+  }
+  // Collapse children first
+  const childNodes = ul.querySelectorAll(':scope > li.tree');
+  let i = 0;
+  function nextChild() {
+    if (i < childNodes.length) {
+      collapseNode(childNodes[i], () => {
+        i++;
+        requestAnimationFrame(nextChild);
+      });
+    } else {
+      // Hide UL
+      ul.style.display = 'none';
+      nodeElement.classList.remove('expanded');
+      nodeElement.dataset.expanded = "false";
+      if (callback) callback();
+    }
+  }
+  nextChild();
+}
+
+/**
+ * Expand all nodes in the entire conversation(s).
+ */
+function expandAll() {
+  const allNodes = document.querySelectorAll('#output li.tree');
+  let i = 0;
+  function expandNext() {
+    if (i < allNodes.length) {
+      expandNode(allNodes[i], () => {
+        i++;
+        requestAnimationFrame(expandNext);
       });
     }
+  }
+  expandNext();
+}
 
-    /**
-     * Global function to collapse all nodes in the conversation tree.
-     * Traverses all root nodes and recursively collapses each branch.
-     */
-    function collapseAll() {
-      const rootNodes = document.querySelectorAll('#output > .conversation');
-      let pending = 0;
-      rootNodes.forEach(conv => {
-        const tree = conv.querySelector('ul.tree');
-        if (tree) {
-          const nodes = tree.querySelectorAll('li.tree');
-          pending += nodes.length;
-          nodes.forEach(node => {
-            recursiveCollapse(node, () => {
-              pending--;
-            });
-          });
-        }
+/**
+ * Collapse all nodes in the entire conversation(s).
+ */
+function collapseAll() {
+  const allNodes = document.querySelectorAll('#output li.tree');
+  let i = 0;
+  function collapseNext() {
+    if (i < allNodes.length) {
+      collapseNode(allNodes[i], () => {
+        i++;
+        requestAnimationFrame(collapseNext);
       });
     }
+  }
+  collapseNext();
+}
 
-    /***************** Keyboard Shortcuts for Global Controls *****************/
-    document.addEventListener('keydown', function(e) {
-      // Ctrl+E to expand all
-      if (e.ctrlKey && e.key.toLowerCase() === 'e') {
-        e.preventDefault();
-        expandAll();
-      }
-      // Ctrl+C to collapse all (Ctrl+C normally copies; choose a different key if needed)
-      if (e.ctrlKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        collapseAll();
-      }
-    });
+document.getElementById('expandAllButton').addEventListener('click', expandAll);
+document.getElementById('collapseAllButton').addEventListener('click', collapseAll);
 
-    /***************** File Input and Conversation Rendering *****************/
-    /**
-     * Renders a mapping tree for a conversation.
-     * @param {Object} mapping - The mapping object from the conversation.
-     * @returns {HTMLElement} The DOM element representing the tree.
-     */
-    function renderMappingTree(mapping) {
-      const roots = [];
-      for (const key in mapping) {
-        if (mapping.hasOwnProperty(key) && mapping[key].parent === null) {
-          roots.push(mapping[key]);
-        }
-      }
-      const ul = document.createElement('ul');
-      ul.classList.add('tree');
-      roots.forEach(root => {
-        ul.appendChild(createNodeElement(root, mapping));
-      });
-      return ul;
-    }
+/********************************************************************
+ * 5. FILE HANDLING AND MAIN RENDER LOGIC
+ ********************************************************************/
 
-    /**
-     * Renders a conversation object.
-     * @param {Object} conversation - The conversation data.
-     * @param {number} index - Used for a unique conversation ID.
-     * @returns {HTMLElement} The DOM element representing the conversation.
-     */
-    function renderConversation(conversation, index) {
-      const container = document.createElement('div');
-      container.classList.add('conversation');
-      const convId = "conversation_" + index;
-      container.id = convId;
+/**
+ * Renders the JSON from a user-selected file.
+ */
+document.getElementById('fileInput').addEventListener('change', function(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      const output = document.getElementById('output');
+      output.innerHTML = ""; // clear any previous
+      resetNavStack();
 
-      // Conversation title and registration in navigation.
-      const header = document.createElement('h2');
-      header.textContent = conversation.title || "Untitled Conversation";
-      container.appendChild(header);
-      registerNavItem(header.textContent, convId, 1);
-
-      // Timestamp display.
-      if (conversation.create_time) {
-        const timeInfo = document.createElement('p');
-        timeInfo.classList.add('timestamp');
-        const date = new Date(conversation.create_time * 1000);
-        timeInfo.textContent = "Created at: " + date.toLocaleString();
-        container.appendChild(timeInfo);
-      }
-
-      // Render mapping tree if available.
-      if (conversation.mapping) {
-        container.appendChild(renderMappingTree(conversation.mapping));
+      if (Array.isArray(data)) {
+        data.forEach((conv, idx) => {
+          output.appendChild(renderConversation(conv, idx));
+        });
+      } else if (typeof data === 'object') {
+        output.appendChild(renderConversation(data, 0));
       } else {
-        const noData = document.createElement('p');
-        noData.textContent = "No mapping data available.";
-        container.appendChild(noData);
+        output.textContent = "Unrecognized data format.";
       }
-      return container;
+    } catch (err) {
+      alert("Error parsing JSON: " + err.message);
     }
+  };
+  reader.readAsText(file);
+});
 
-    /**
-     * Handles file upload, parses JSON, resets navigation,
-     * renders conversations, and builds the sidebar.
-     */
-    document.getElementById('fileInput').addEventListener('change', function (event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          try {
-            const data = JSON.parse(e.target.result);
-            const output = document.getElementById('output');
-            output.innerHTML = ""; // Clear previous content.
-            resetNavStack(); // Reset sidebar navigation.
+/********************************************************************
+ * 6. OPTIONAL KEYBOARD SHORTCUTS (CTRL+E, CTRL+X, etc.)
+ ********************************************************************/
+document.addEventListener('keydown', function(e) {
+  // Ctrl+E => expand all
+  if (e.ctrlKey && e.key.toLowerCase() === 'e') {
+    e.preventDefault();
+    expandAll();
+  }
+  // Ctrl+X => collapse all
+  if (e.ctrlKey && e.key.toLowerCase() === 'x') {
+    e.preventDefault();
+    collapseAll();
+  }
+});
+</script>
 
-            // Render conversations: if array, render each; if object, render one.
-            if (Array.isArray(data)) {
-              data.forEach((conv, index) => {
-                output.appendChild(renderConversation(conv, index));
-              });
-            } else if (typeof data === 'object') {
-              output.appendChild(renderConversation(data, 0));
-            } else {
-              output.textContent = "Unrecognized data format.";
-            }
-          } catch (err) {
-            alert("Error parsing JSON file: " + err);
-          }
-        };
-        reader.readAsText(file);
-      }
-    });
-
-    /***************** Global Buttons Event Listeners *****************/
-    document.getElementById('expandAllButton').addEventListener('click', function () {
-      expandAll();
-    });
-    document.getElementById('collapseAllButton').addEventListener('click', function () {
-      collapseAll();
-    });
-  </script>
 </body>
 </html>
