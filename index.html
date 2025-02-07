@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Enhanced JSON Conversation Viewer</title>
+  <title>Fully Enhanced JSON Conversation Viewer</title>
   <style>
-    /* Global resets and smooth scrolling */
+    /* Global Resets and Smooth Scrolling */
     html, body {
       margin: 0;
       padding: 0;
@@ -12,12 +12,12 @@
       font-family: Arial, sans-serif;
       scroll-behavior: smooth;
     }
-    /* Container for sidebar and main content */
+    /* Container for Sidebar and Main Content */
     #container {
       display: flex;
       height: 100vh;
     }
-    /* Sidebar styles */
+    /* Sidebar Styles */
     #sidebar {
       width: 250px;
       border-right: 1px solid #ccc;
@@ -27,8 +27,9 @@
     }
     #sidebar h2 {
       margin-top: 0;
+      font-size: 1.2em;
     }
-    /* Navigation list styling (hierarchical, collapsible) */
+    /* Navigation List Styling (Hierarchical, Collapsible) */
     #navList {
       list-style: none;
       padding-left: 0;
@@ -44,14 +45,27 @@
     #navList li a.active {
       background-color: #d3d3d3;
     }
-    /* Main content styles */
+    /* Global Navigation Nested UL styling */
+    #navList ul {
+      list-style: none;
+      padding-left: 15px;
+      margin: 0;
+      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+    }
+    #navList ul.hidden {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+    }
+    /* Main Content Styles */
     #main {
       flex-grow: 1;
       padding: 10px;
       overflow-y: auto;
       height: 100%;
+      position: relative;
     }
-    /* Global buttons container */
+    /* Global Buttons Container */
     #globalButtons {
       margin-bottom: 10px;
     }
@@ -61,7 +75,7 @@
       font-size: 0.9em;
       cursor: pointer;
     }
-    /* Conversation container styling */
+    /* Conversation Container Styling */
     .conversation {
       border: 1px solid #ccc;
       margin: 15px 0;
@@ -71,28 +85,36 @@
     }
     .conversation h2 {
       margin-top: 0;
+      font-size: 1.2em;
     }
     .conversation p.timestamp {
       font-size: 0.85em;
       color: #666;
       margin: 2px 0 8px 0;
     }
-    /* Tree view styles for the conversation mapping */
+    /* Tree View Styles for Conversation Mapping */
     ul.tree {
       list-style-type: none;
       margin-left: 20px;
       padding-left: 0;
+      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
     }
-    /* Nested ul gets a dashed left border to indicate threading */
+    /* Nested UL gets a dashed left border to indicate threading */
     ul.tree ul {
       border-left: 2px dashed #ccc;
       margin-left: 10px;
       padding-left: 10px;
+      transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
     }
     li.tree {
       margin: 5px 0;
       position: relative;
       cursor: pointer;
+      /* Ensure proper text wrapping in the li as well */
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+      max-width: 600px;
     }
     .node-title {
       font-weight: bold;
@@ -102,33 +124,34 @@
       font-size: 0.9em;
       color: #555;
       margin: 5px 0;
-      /* Ensure proper text wrapping */
       overflow-wrap: break-word;
       word-wrap: break-word;
       word-break: break-word;
       max-width: 600px;
     }
-    /* Toggle icon for nodes with children */
+    /* Toggle Icons for Expandable Nodes */
     li.tree.toggle::before {
       content: "▸ ";
       display: inline-block;
       width: 1em;
+      transition: transform 0.3s ease;
     }
     li.tree.expanded::before {
       content: "▾ ";
+      transform: rotate(0deg);
     }
-    /* Hide nested lists by default */
+    /* Hide Nested Lists by Default */
     .hidden {
       display: none;
     }
-    /* Copy button styling */
+    /* Copy Button Styling */
     .copy-button {
       margin-left: 10px;
       padding: 2px 5px;
       font-size: 0.8em;
       cursor: pointer;
     }
-    /* Message type styles */
+    /* Message Type Styles */
     .message-system {
       background-color: #f0f8ff;
     }
@@ -138,8 +161,14 @@
     .message-assistant {
       background-color: #fffbe6;
     }
+    /* Spinner/Loading Indicator */
+    .loading-spinner {
+      font-size: 0.9em;
+      color: #888;
+      margin-left: 10px;
+    }
   </style>
-  <!-- Marked.js for Markdown rendering -->
+  <!-- Marked.js for Markdown Rendering -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -161,13 +190,10 @@
   </div>
 
   <script>
-    /******** Global Variables for Navigation ********/
+    /***************** Global Variables and Navigation Setup *****************/
     const navRoot = document.getElementById('navList');
     let navStack = [{ level: 0, element: navRoot }];
 
-    /**
-     * Resets the global navigation stack.
-     */
     function resetNavStack() {
       navStack = [{ level: 0, element: navRoot }];
       navRoot.innerHTML = "";
@@ -178,7 +204,7 @@
      * Builds a nested, collapsible tree in the sidebar.
      * @param {string} title - The text to display.
      * @param {string} targetId - The id of the element to navigate to.
-     * @param {number} level - Header level (used for indentation).
+     * @param {number} level - Header level for indentation.
      */
     function registerNavItem(title, targetId, level = 1) {
       const li = document.createElement('li');
@@ -193,27 +219,27 @@
       link.style.padding = "4px 8px";
       link.style.borderRadius = "4px";
       link.addEventListener('click', function(e) {
-           e.preventDefault();
-           // Remove active state from all links
-           navRoot.querySelectorAll('a').forEach(a => a.classList.remove('active'));
-           link.classList.add('active');
-           document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
-           // Toggle nested section if present
-           const nested = li.querySelector('ul');
-           if (nested) {
-             nested.classList.toggle('hidden');
-           }
+        e.preventDefault();
+        // Remove active state from all links
+        navRoot.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+        document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
+        // If the nav item has nested children, toggle them
+        const nested = li.querySelector('ul');
+        if (nested) {
+          nested.classList.toggle('hidden');
+        }
       });
       li.appendChild(link);
 
-      // Adjust the navStack to insert this item in the proper hierarchy
+      // Adjust navStack to insert item properly in hierarchy
       while (navStack.length > 0 && navStack[navStack.length - 1].level >= level) {
-           navStack.pop();
+        navStack.pop();
       }
       const parentObj = navStack[navStack.length - 1];
       parentObj.element.appendChild(li);
 
-      // Create a nested <ul> for children and push it onto the navStack
+      // Create a nested <ul> for children and push it onto navStack
       const childUl = document.createElement('ul');
       childUl.style.listStyle = 'none';
       childUl.style.paddingLeft = '10px';
@@ -231,44 +257,41 @@
       return id.length > 8 ? id.substring(0, 8) + '...' : id;
     }
 
+    /***************** Node Creation and Lazy Loading *****************/
     /**
-     * Recursively creates an <li> element representing a single node.
-     * Implements lazy loading: children are only built when a node is expanded.
-     * Differentiates message types using CSS classes.
+     * Recursively creates a <li> element for a conversation node.
+     * Implements lazy loading so children are built only on expansion.
+     * Differentiates message types with CSS classes.
      * @param {Object} node - A node from the mapping.
-     * @param {Object} mapping - The full mapping of nodes.
-     * @returns {HTMLElement} The <li> element for this node.
+     * @param {Object} mapping - The complete mapping of nodes.
+     * @returns {HTMLElement} The <li> element representing this node.
      */
     function createNodeElement(node, mapping) {
       const li = document.createElement('li');
       li.classList.add('tree');
-
-      // Set a unique id for navigation purposes.
       li.id = "node_" + node.id;
 
-      // Differentiate message types (system, user, assistant)
+      // Differentiate message types based on author role.
       if (node.message && node.message.author && node.message.author.role) {
         li.classList.add('message-' + node.message.author.role);
       }
 
-      // Create a span for the node title.
+      // Create span for the node title.
       const titleSpan = document.createElement('span');
       titleSpan.classList.add('node-title');
-      // Default title is the truncated node id.
       titleSpan.textContent = truncateId(node.id);
       li.appendChild(titleSpan);
 
-      // Process message content if available.
+      // Process message content (if available).
       if (node.message && node.message.content && node.message.content.parts) {
         const rawText = node.message.content.parts.join(" ").trim();
         if (rawText) {
-          // Render Markdown using Marked.js.
           const contentDiv = document.createElement('div');
           contentDiv.classList.add('node-content');
           contentDiv.innerHTML = marked.parse(rawText);
           li.appendChild(contentDiv);
 
-          // Add a Copy button for the raw Markdown.
+          // Add Copy button to copy raw Markdown.
           const copyButton = document.createElement('button');
           copyButton.classList.add('copy-button');
           copyButton.textContent = "Copy";
@@ -280,7 +303,7 @@
           });
           li.appendChild(copyButton);
 
-          // If the raw text starts with a Markdown header, update the title and add a nav item.
+          // If raw text begins with a Markdown header, update title and register nav item.
           const headerMatch = rawText.match(/^(#{1,6})\s+(.*)/);
           if (headerMatch) {
             const headerLevel = headerMatch[1].length;
@@ -291,41 +314,186 @@
         }
       }
 
-      // Lazy-load children: do not build child nodes until expansion.
+      // Lazy-load children only when node is expanded.
       if (node.children && node.children.length > 0) {
         li.classList.add('toggle');
         const ul = document.createElement('ul');
         ul.classList.add('hidden');
         li.appendChild(ul);
-        li.dataset.loaded = "false";
-        // Store a function on the li to load its children when needed.
+        li.dataset.expanded = "false";
+        // Optional loading spinner element.
+        const spinner = document.createElement('span');
+        spinner.classList.add('loading-spinner');
+        spinner.textContent = "Loading...";
+        spinner.style.display = "none";
+        li.appendChild(spinner);
+        
         li.loadChildren = function() {
-          if (li.dataset.loaded !== "true") {
-            node.children.forEach(childId => {
-              const childNode = mapping[childId];
-              if (childNode) {
-                ul.appendChild(createNodeElement(childNode, mapping));
-              }
-            });
-            li.dataset.loaded = "true";
+          if (li.dataset.expanded === "false") {
+            spinner.style.display = "inline";
+            // Use setTimeout to simulate asynchronous loading and batch DOM updates.
+            setTimeout(() => {
+              node.children.forEach(childId => {
+                const childNode = mapping[childId];
+                if (childNode) {
+                  ul.appendChild(createNodeElement(childNode, mapping));
+                }
+              });
+              li.dataset.expanded = "true";
+              spinner.style.display = "none";
+            }, 50);
           }
         };
+
         // Toggle expansion on clicking the title.
         titleSpan.addEventListener('click', function(e) {
           e.stopPropagation();
-          li.loadChildren();
-          ul.classList.toggle('hidden');
-          li.classList.toggle('expanded');
+          // Load children if not already loaded.
+          if (li.dataset.expanded === "false") {
+            li.loadChildren();
+          }
+          if (ul.classList.contains('hidden')) {
+            ul.classList.remove('hidden');
+            li.classList.add('expanded');
+          } else {
+            ul.classList.add('hidden');
+            li.classList.remove('expanded');
+          }
         });
       }
       return li;
     }
 
+    /***************** Recursive Expand/Collapse Functions *****************/
     /**
-     * Renders the conversation’s mapping as a tree view.
-     * Finds root nodes (nodes with no parent) and builds a nested <ul> tree.
-     * @param {Object} mapping - The mapping object.
-     * @returns {HTMLElement} The tree view as a <ul> element.
+     * Recursively expands a node element and all its children.
+     * Uses asynchronous batching to avoid UI freezing on large trees.
+     * @param {HTMLElement} nodeElement - The DOM element representing a node.
+     * @param {Function} callback - Optional callback when expansion is complete.
+     */
+    function recursiveExpand(nodeElement, callback) {
+      // If nodeElement is expandable, process its children.
+      const ul = nodeElement.querySelector('ul');
+      if (ul) {
+        // Load children if not yet loaded.
+        if (typeof nodeElement.loadChildren === "function" && nodeElement.dataset.expanded === "false") {
+          nodeElement.loadChildren();
+        }
+        // Expand the current node.
+        ul.classList.remove('hidden');
+        nodeElement.classList.add('expanded');
+        nodeElement.dataset.expanded = "true";
+        // Process each child node asynchronously.
+        const children = ul.querySelectorAll(':scope > li.tree');
+        let i = 0;
+        function expandNext() {
+          if (i < children.length) {
+            recursiveExpand(children[i], () => {
+              i++;
+              requestAnimationFrame(expandNext);
+            });
+          } else {
+            if (callback) callback();
+          }
+        }
+        expandNext();
+      } else {
+        if (callback) callback();
+      }
+    }
+
+    /**
+     * Recursively collapses a node element and all its children.
+     * @param {HTMLElement} nodeElement - The DOM element representing a node.
+     * @param {Function} callback - Optional callback when collapse is complete.
+     */
+    function recursiveCollapse(nodeElement, callback) {
+      const ul = nodeElement.querySelector('ul');
+      if (ul) {
+        const children = ul.querySelectorAll(':scope > li.tree');
+        let i = 0;
+        function collapseNext() {
+          if (i < children.length) {
+            recursiveCollapse(children[i], () => {
+              i++;
+              requestAnimationFrame(collapseNext);
+            });
+          } else {
+            // Collapse current node.
+            ul.classList.add('hidden');
+            nodeElement.classList.remove('expanded');
+            nodeElement.dataset.expanded = "false";
+            if (callback) callback();
+          }
+        }
+        collapseNext();
+      } else {
+        if (callback) callback();
+      }
+    }
+
+    /**
+     * Global function to expand all nodes in the conversation tree.
+     * Traverses all root nodes and recursively expands each branch.
+     */
+    function expandAll() {
+      const rootNodes = document.querySelectorAll('#output > .conversation');
+      let pending = 0;
+      rootNodes.forEach(conv => {
+        const tree = conv.querySelector('ul.tree');
+        if (tree) {
+          // Expand each direct child node of the tree.
+          const nodes = tree.querySelectorAll('li.tree');
+          pending += nodes.length;
+          nodes.forEach(node => {
+            recursiveExpand(node, () => {
+              pending--;
+            });
+          });
+        }
+      });
+    }
+
+    /**
+     * Global function to collapse all nodes in the conversation tree.
+     * Traverses all root nodes and recursively collapses each branch.
+     */
+    function collapseAll() {
+      const rootNodes = document.querySelectorAll('#output > .conversation');
+      let pending = 0;
+      rootNodes.forEach(conv => {
+        const tree = conv.querySelector('ul.tree');
+        if (tree) {
+          const nodes = tree.querySelectorAll('li.tree');
+          pending += nodes.length;
+          nodes.forEach(node => {
+            recursiveCollapse(node, () => {
+              pending--;
+            });
+          });
+        }
+      });
+    }
+
+    /***************** Keyboard Shortcuts for Global Controls *****************/
+    document.addEventListener('keydown', function(e) {
+      // Ctrl+E to expand all
+      if (e.ctrlKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        expandAll();
+      }
+      // Ctrl+C to collapse all (Ctrl+C normally copies; choose a different key if needed)
+      if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        collapseAll();
+      }
+    });
+
+    /***************** File Input and Conversation Rendering *****************/
+    /**
+     * Renders a mapping tree for a conversation.
+     * @param {Object} mapping - The mapping object from the conversation.
+     * @returns {HTMLElement} The DOM element representing the tree.
      */
     function renderMappingTree(mapping) {
       const roots = [];
@@ -345,24 +513,22 @@
     /**
      * Renders a conversation object.
      * @param {Object} conversation - The conversation data.
-     * @param {number} index - Used to generate a unique id.
-     * @returns {HTMLElement} A div element representing the conversation.
+     * @param {number} index - Used for a unique conversation ID.
+     * @returns {HTMLElement} The DOM element representing the conversation.
      */
     function renderConversation(conversation, index) {
       const container = document.createElement('div');
       container.classList.add('conversation');
-      // Set a unique id for the conversation.
       const convId = "conversation_" + index;
       container.id = convId;
 
-      // Display conversation title.
+      // Conversation title and registration in navigation.
       const header = document.createElement('h2');
       header.textContent = conversation.title || "Untitled Conversation";
       container.appendChild(header);
-      // Register the conversation header in the navigation as level‑1.
       registerNavItem(header.textContent, convId, 1);
 
-      // Display creation timestamp.
+      // Timestamp display.
       if (conversation.create_time) {
         const timeInfo = document.createElement('p');
         timeInfo.classList.add('timestamp');
@@ -371,7 +537,7 @@
         container.appendChild(timeInfo);
       }
 
-      // Render the mapping tree if available.
+      // Render mapping tree if available.
       if (conversation.mapping) {
         container.appendChild(renderMappingTree(conversation.mapping));
       } else {
@@ -383,44 +549,8 @@
     }
 
     /**
-     * Expands all nodes in the output (global expand functionality).
-     * Recursively loads children where needed and removes "hidden" classes.
-     */
-    function expandAll() {
-      const toggles = document.querySelectorAll('#output li.toggle');
-      toggles.forEach(li => {
-        if (typeof li.loadChildren === "function") {
-          li.loadChildren();
-        }
-        const ul = li.querySelector('ul');
-        if (ul) {
-          ul.classList.remove('hidden');
-        }
-        li.classList.add('expanded');
-      });
-    }
-
-    /**
-     * Collapses all nodes in the output (global collapse functionality).
-     */
-    function collapseAll() {
-      const toggles = document.querySelectorAll('#output li.toggle');
-      toggles.forEach(li => {
-        const ul = li.querySelector('ul');
-        if (ul) {
-          ul.classList.add('hidden');
-        }
-        li.classList.remove('expanded');
-      });
-    }
-
-    // Attach listeners to the global expand/collapse buttons.
-    document.getElementById('expandAllButton').addEventListener('click', expandAll);
-    document.getElementById('collapseAllButton').addEventListener('click', collapseAll);
-
-    /**
-     * Handles the file upload: reads the JSON file, resets the navigation,
-     * renders the conversations, and builds the sidebar navigation.
+     * Handles file upload, parses JSON, resets navigation,
+     * renders conversations, and builds the sidebar.
      */
     document.getElementById('fileInput').addEventListener('change', function (event) {
       const file = event.target.files[0];
@@ -428,13 +558,12 @@
         const reader = new FileReader();
         reader.onload = function (e) {
           try {
-            // Parse the JSON file.
             const data = JSON.parse(e.target.result);
             const output = document.getElementById('output');
             output.innerHTML = ""; // Clear previous content.
-            resetNavStack(); // Clear and reinitialize the navigation.
+            resetNavStack(); // Reset sidebar navigation.
 
-            // If the JSON is an array, render each conversation; otherwise, render one.
+            // Render conversations: if array, render each; if object, render one.
             if (Array.isArray(data)) {
               data.forEach((conv, index) => {
                 output.appendChild(renderConversation(conv, index));
@@ -450,6 +579,14 @@
         };
         reader.readAsText(file);
       }
+    });
+
+    /***************** Global Buttons Event Listeners *****************/
+    document.getElementById('expandAllButton').addEventListener('click', function () {
+      expandAll();
+    });
+    document.getElementById('collapseAllButton').addEventListener('click', function () {
+      collapseAll();
     });
   </script>
 </body>
