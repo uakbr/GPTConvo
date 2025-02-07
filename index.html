@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JSON Conversation Tree Viewer with Navigation</title>
+  <style>
+    /* Basic resets and smooth scrolling */
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      scroll-behavior: smooth;
+    }
+    /* Container holds the sidebar and main content */
+    #container {
+      display: flex;
+      height: 100%;
+    }
+    /* Sidebar styling */
+    #sidebar {
+      width: 250px;
+      border-right: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+      background-color: #f8f8f8;
+    }
+    #sidebar h2 {
+      margin-top: 0;
+    }
+    #sidebar ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    #sidebar li {
+      margin: 5px 0;
+    }
+    /* Main content styling */
+    #main {
+      flex-grow: 1;
+      padding: 10px;
+      overflow-y: auto;
+      height: 100%;
+    }
+    /* Conversation container */
+    .conversation {
+      border: 1px solid #ccc;
+      margin: 15px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .conversation h2 {
+      margin-top: 0;
+    }
+    /* Tree view styles */
+    ul.tree {
+      list-style-type: none;
+      margin-left: 20px;
+      padding-left: 0;
+    }
+    li {
+      margin: 5px 0;
+      cursor: pointer;
+    }
+    .node-title {
+      font-weight: bold;
+    }
+    .node-content {
+      font-size: 0.9em;
+      color: #555;
+      margin-left: 10px;
+    }
+    /* Toggle icon for nodes with children */
+    .toggle::before {
+      content: "▸ ";
+      display: inline-block;
+      width: 1em;
+    }
+    .expanded::before {
+      content: "▾ ";
+    }
+    /* Hide nested lists by default */
+    .hidden {
+      display: none;
+    }
+    /* Copy button styling */
+    .copy-button {
+      margin-left: 10px;
+      padding: 2px 5px;
+      font-size: 0.8em;
+      cursor: pointer;
+    }
+  </style>
+  <!-- Include Marked.js from a CDN for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div id="container">
+    <!-- Sidebar Navigation -->
+    <div id="sidebar">
+      <h2>Navigation</h2>
+      <ul id="navList"></ul>
+    </div>
+    <!-- Main Content Area -->
+    <div id="main">
+      <input type="file" id="fileInput" accept=".json" />
+      <div id="output"></div>
+    </div>
+  </div>
+
+  <script>
+    // Global reference to the sidebar navigation list
+    const sidebarNavList = document.getElementById('navList');
+
+    /**
+     * Registers a navigation item in the sidebar.
+     * @param {string} title - The text to display.
+     * @param {string} targetId - The id of the element to navigate to.
+     * @param {number} level - Header level (used for indentation).
+     */
+    function registerNavItem(title, targetId, level = 1) {
+      const li = document.createElement('li');
+      li.style.marginLeft = ((level - 1) * 15) + "px";
+      const a = document.createElement('a');
+      a.href = "#" + targetId;
+      a.textContent = title;
+      a.style.textDecoration = "none";
+      a.style.color = "#333";
+      li.appendChild(a);
+      sidebarNavList.appendChild(li);
+    }
+
+    /**
+     * Recursively creates an <li> element representing a single node.
+     * @param {Object} node - A node from the mapping.
+     * @param {Object} mapping - The full mapping of nodes.
+     * @returns {HTMLElement} The <li> element for this node.
+     */
+    function createNodeElement(node, mapping) {
+      const li = document.createElement('li');
+      li.classList.add('tree');
+
+      // Assign an id for navigation
+      li.id = "node_" + node.id;
+
+      // Create a span for the node title (by default, the node id)
+      const titleSpan = document.createElement('span');
+      titleSpan.classList.add('node-title');
+      titleSpan.textContent = node.id;
+      li.appendChild(titleSpan);
+
+      // Process the node message if available
+      if (node.message && node.message.content && node.message.content.parts) {
+        const rawText = node.message.content.parts.join(" ").trim();
+        if (rawText) {
+          // Create a container for rendered Markdown
+          const contentDiv = document.createElement('div');
+          contentDiv.classList.add('node-content');
+          // Render Markdown (using marked.js)
+          contentDiv.innerHTML = marked.parse(rawText);
+          li.appendChild(contentDiv);
+
+          // Add a "Copy" button to copy the raw Markdown text
+          const copyButton = document.createElement('button');
+          copyButton.classList.add('copy-button');
+          copyButton.textContent = "Copy";
+          copyButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(rawText)
+              .then(() => alert("Copied!"))
+              .catch(err => alert("Error copying text: " + err));
+          });
+          li.appendChild(copyButton);
+
+          // If the raw text starts with a Markdown header, register it in navigation.
+          // For example, a line like "# Header Title"
+          const headerMatch = rawText.match(/^(#{1,6})\s+(.*)/);
+          if (headerMatch) {
+            const headerLevel = headerMatch[1].length;
+            const headerTitle = headerMatch[2].trim();
+            // Optionally update the title in the tree to the header title
+            titleSpan.textContent = headerTitle;
+            registerNavItem(headerTitle, li.id, headerLevel);
+          }
+        }
+      }
+
+      // If the node has children, create a nested list
+      if (node.children && node.children.length > 0) {
+        li.classList.add('toggle');
+        const ul = document.createElement('ul');
+        ul.classList.add('hidden');
+        node.children.forEach(childId => {
+          const childNode = mapping[childId];
+          if (childNode) {
+            ul.appendChild(createNodeElement(childNode, mapping));
+          }
+        });
+        li.appendChild(ul);
+
+        // Toggle child visibility on clicking the title
+        titleSpan.addEventListener('click', function(e) {
+          e.stopPropagation();
+          ul.classList.toggle('hidden');
+          li.classList.toggle('expanded');
+        });
+      }
+      return li;
+    }
+
+    /**
+     * Renders the conversation’s mapping as a tree view.
+     * Finds root nodes (nodes with no parent) and builds a nested <ul> tree.
+     * @param {Object} mapping - The mapping object.
+     * @returns {HTMLElement} The tree view as a <ul> element.
+     */
+    function renderMappingTree(mapping) {
+      const roots = [];
+      for (const key in mapping) {
+        if (mapping.hasOwnProperty(key) && mapping[key].parent === null) {
+          roots.push(mapping[key]);
+        }
+      }
+      const ul = document.createElement('ul');
+      ul.classList.add('tree');
+      roots.forEach(root => {
+        ul.appendChild(createNodeElement(root, mapping));
+      });
+      return ul;
+    }
+
+    /**
+     * Renders a conversation object.
+     * @param {Object} conversation - The conversation data.
+     * @param {number} index - Used to generate a unique id.
+     * @returns {HTMLElement} A div element representing the conversation.
+     */
+    function renderConversation(conversation, index) {
+      const container = document.createElement('div');
+      container.classList.add('conversation');
+      // Assign a unique id for navigation
+      const convId = "conversation_" + index;
+      container.id = convId;
+
+      // Display conversation title.
+      const header = document.createElement('h2');
+      header.textContent = conversation.title || "Untitled Conversation";
+      container.appendChild(header);
+
+      // Register conversation title in the sidebar (as a level‑1 header)
+      registerNavItem(header.textContent, convId, 1);
+
+      // Display creation time if available.
+      if (conversation.create_time) {
+        const timeInfo = document.createElement('p');
+        const date = new Date(conversation.create_time * 1000);
+        timeInfo.textContent = "Created at: " + date.toLocaleString();
+        container.appendChild(timeInfo);
+      }
+
+      // Render the mapping tree if it exists.
+      if (conversation.mapping) {
+        container.appendChild(renderMappingTree(conversation.mapping));
+      } else {
+        const noData = document.createElement('p');
+        noData.textContent = "No mapping data available.";
+        container.appendChild(noData);
+      }
+      return container;
+    }
+
+    /**
+     * Handles the file upload: reads the JSON file and renders the conversations
+     * and builds the sidebar navigation.
+     */
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            // Parse the JSON file
+            const data = JSON.parse(e.target.result);
+            const output = document.getElementById('output');
+            output.innerHTML = ""; // Clear previous content
+            // Clear the sidebar navigation
+            sidebarNavList.innerHTML = "";
+
+            // If the JSON is an array, render each conversation; otherwise, render one.
+            if (Array.isArray(data)) {
+              data.forEach((conv, index) => {
+                output.appendChild(renderConversation(conv, index));
+              });
+            } else if (typeof data === 'object') {
+              output.appendChild(renderConversation(data, 0));
+            } else {
+              output.textContent = "Unrecognized data format.";
+            }
+          } catch (err) {
+            alert("Error parsing JSON file: " + err);
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+  </script>
+</body>
+</html>
