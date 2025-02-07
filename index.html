@@ -2,22 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>JSON Conversation Tree Viewer with Navigation</title>
+  <title>Enhanced JSON Conversation Viewer</title>
   <style>
-    /* Basic resets and smooth scrolling */
-    body, html {
+    /* Global resets and smooth scrolling */
+    html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: Arial, sans-serif;
       scroll-behavior: smooth;
     }
-    /* Container holds the sidebar and main content */
+    /* Container for sidebar and main content */
     #container {
       display: flex;
-      height: 100%;
+      height: 100vh;
     }
-    /* Sidebar styling */
+    /* Sidebar styles */
     #sidebar {
       width: 250px;
       border-right: 1px solid #ccc;
@@ -28,55 +28,93 @@
     #sidebar h2 {
       margin-top: 0;
     }
-    #sidebar ul {
+    /* Navigation list styling (hierarchical, collapsible) */
+    #navList {
       list-style: none;
       padding-left: 0;
+      margin: 0;
     }
-    #sidebar li {
-      margin: 5px 0;
+    #navList li a {
+      text-decoration: none;
+      color: #333;
+      display: block;
+      padding: 4px 8px;
+      border-radius: 4px;
     }
-    /* Main content styling */
+    #navList li a.active {
+      background-color: #d3d3d3;
+    }
+    /* Main content styles */
     #main {
       flex-grow: 1;
       padding: 10px;
       overflow-y: auto;
       height: 100%;
     }
-    /* Conversation container */
+    /* Global buttons container */
+    #globalButtons {
+      margin-bottom: 10px;
+    }
+    #globalButtons button {
+      margin-right: 10px;
+      padding: 6px 12px;
+      font-size: 0.9em;
+      cursor: pointer;
+    }
+    /* Conversation container styling */
     .conversation {
       border: 1px solid #ccc;
       margin: 15px 0;
       padding: 10px;
       border-radius: 4px;
+      background-color: #fff;
     }
     .conversation h2 {
       margin-top: 0;
     }
-    /* Tree view styles */
+    .conversation p.timestamp {
+      font-size: 0.85em;
+      color: #666;
+      margin: 2px 0 8px 0;
+    }
+    /* Tree view styles for the conversation mapping */
     ul.tree {
       list-style-type: none;
       margin-left: 20px;
       padding-left: 0;
     }
-    li {
+    /* Nested ul gets a dashed left border to indicate threading */
+    ul.tree ul {
+      border-left: 2px dashed #ccc;
+      margin-left: 10px;
+      padding-left: 10px;
+    }
+    li.tree {
       margin: 5px 0;
+      position: relative;
       cursor: pointer;
     }
     .node-title {
       font-weight: bold;
+      display: inline-block;
     }
     .node-content {
       font-size: 0.9em;
       color: #555;
-      margin-left: 10px;
+      margin: 5px 0;
+      /* Ensure proper text wrapping */
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+      max-width: 600px;
     }
     /* Toggle icon for nodes with children */
-    .toggle::before {
+    li.tree.toggle::before {
       content: "▸ ";
       display: inline-block;
       width: 1em;
     }
-    .expanded::before {
+    li.tree.expanded::before {
       content: "▾ ";
     }
     /* Hide nested lists by default */
@@ -90,48 +128,113 @@
       font-size: 0.8em;
       cursor: pointer;
     }
+    /* Message type styles */
+    .message-system {
+      background-color: #f0f8ff;
+    }
+    .message-user {
+      background-color: #f9f9f9;
+    }
+    .message-assistant {
+      background-color: #fffbe6;
+    }
   </style>
-  <!-- Include Marked.js from a CDN for Markdown rendering -->
+  <!-- Marked.js for Markdown rendering -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div id="container">
-    <!-- Sidebar Navigation -->
+    <!-- Navigation Sidebar -->
     <div id="sidebar">
       <h2>Navigation</h2>
       <ul id="navList"></ul>
     </div>
     <!-- Main Content Area -->
     <div id="main">
+      <div id="globalButtons">
+        <button id="expandAllButton">Expand All</button>
+        <button id="collapseAllButton">Collapse All</button>
+      </div>
       <input type="file" id="fileInput" accept=".json" />
       <div id="output"></div>
     </div>
   </div>
 
   <script>
-    // Global reference to the sidebar navigation list
-    const sidebarNavList = document.getElementById('navList');
+    /******** Global Variables for Navigation ********/
+    const navRoot = document.getElementById('navList');
+    let navStack = [{ level: 0, element: navRoot }];
+
+    /**
+     * Resets the global navigation stack.
+     */
+    function resetNavStack() {
+      navStack = [{ level: 0, element: navRoot }];
+      navRoot.innerHTML = "";
+    }
 
     /**
      * Registers a navigation item in the sidebar.
+     * Builds a nested, collapsible tree in the sidebar.
      * @param {string} title - The text to display.
      * @param {string} targetId - The id of the element to navigate to.
      * @param {number} level - Header level (used for indentation).
      */
     function registerNavItem(title, targetId, level = 1) {
       const li = document.createElement('li');
+      li.style.listStyle = 'none';
       li.style.marginLeft = ((level - 1) * 15) + "px";
-      const a = document.createElement('a');
-      a.href = "#" + targetId;
-      a.textContent = title;
-      a.style.textDecoration = "none";
-      a.style.color = "#333";
-      li.appendChild(a);
-      sidebarNavList.appendChild(li);
+      const link = document.createElement('a');
+      link.href = "#" + targetId;
+      link.textContent = title;
+      link.style.textDecoration = "none";
+      link.style.color = "#333";
+      link.style.display = "block";
+      link.style.padding = "4px 8px";
+      link.style.borderRadius = "4px";
+      link.addEventListener('click', function(e) {
+           e.preventDefault();
+           // Remove active state from all links
+           navRoot.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+           link.classList.add('active');
+           document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
+           // Toggle nested section if present
+           const nested = li.querySelector('ul');
+           if (nested) {
+             nested.classList.toggle('hidden');
+           }
+      });
+      li.appendChild(link);
+
+      // Adjust the navStack to insert this item in the proper hierarchy
+      while (navStack.length > 0 && navStack[navStack.length - 1].level >= level) {
+           navStack.pop();
+      }
+      const parentObj = navStack[navStack.length - 1];
+      parentObj.element.appendChild(li);
+
+      // Create a nested <ul> for children and push it onto the navStack
+      const childUl = document.createElement('ul');
+      childUl.style.listStyle = 'none';
+      childUl.style.paddingLeft = '10px';
+      childUl.classList.add('hidden');
+      li.appendChild(childUl);
+      navStack.push({ level: level, element: childUl });
+    }
+
+    /**
+     * Utility function to truncate long IDs.
+     * @param {string} id - The full node id.
+     * @returns {string} Truncated id.
+     */
+    function truncateId(id) {
+      return id.length > 8 ? id.substring(0, 8) + '...' : id;
     }
 
     /**
      * Recursively creates an <li> element representing a single node.
+     * Implements lazy loading: children are only built when a node is expanded.
+     * Differentiates message types using CSS classes.
      * @param {Object} node - A node from the mapping.
      * @param {Object} mapping - The full mapping of nodes.
      * @returns {HTMLElement} The <li> element for this node.
@@ -140,27 +243,32 @@
       const li = document.createElement('li');
       li.classList.add('tree');
 
-      // Assign an id for navigation
+      // Set a unique id for navigation purposes.
       li.id = "node_" + node.id;
 
-      // Create a span for the node title (by default, the node id)
+      // Differentiate message types (system, user, assistant)
+      if (node.message && node.message.author && node.message.author.role) {
+        li.classList.add('message-' + node.message.author.role);
+      }
+
+      // Create a span for the node title.
       const titleSpan = document.createElement('span');
       titleSpan.classList.add('node-title');
-      titleSpan.textContent = node.id;
+      // Default title is the truncated node id.
+      titleSpan.textContent = truncateId(node.id);
       li.appendChild(titleSpan);
 
-      // Process the node message if available
+      // Process message content if available.
       if (node.message && node.message.content && node.message.content.parts) {
         const rawText = node.message.content.parts.join(" ").trim();
         if (rawText) {
-          // Create a container for rendered Markdown
+          // Render Markdown using Marked.js.
           const contentDiv = document.createElement('div');
           contentDiv.classList.add('node-content');
-          // Render Markdown (using marked.js)
           contentDiv.innerHTML = marked.parse(rawText);
           li.appendChild(contentDiv);
 
-          // Add a "Copy" button to copy the raw Markdown text
+          // Add a Copy button for the raw Markdown.
           const copyButton = document.createElement('button');
           copyButton.classList.add('copy-button');
           copyButton.textContent = "Copy";
@@ -172,35 +280,40 @@
           });
           li.appendChild(copyButton);
 
-          // If the raw text starts with a Markdown header, register it in navigation.
-          // For example, a line like "# Header Title"
+          // If the raw text starts with a Markdown header, update the title and add a nav item.
           const headerMatch = rawText.match(/^(#{1,6})\s+(.*)/);
           if (headerMatch) {
             const headerLevel = headerMatch[1].length;
             const headerTitle = headerMatch[2].trim();
-            // Optionally update the title in the tree to the header title
             titleSpan.textContent = headerTitle;
             registerNavItem(headerTitle, li.id, headerLevel);
           }
         }
       }
 
-      // If the node has children, create a nested list
+      // Lazy-load children: do not build child nodes until expansion.
       if (node.children && node.children.length > 0) {
         li.classList.add('toggle');
         const ul = document.createElement('ul');
         ul.classList.add('hidden');
-        node.children.forEach(childId => {
-          const childNode = mapping[childId];
-          if (childNode) {
-            ul.appendChild(createNodeElement(childNode, mapping));
-          }
-        });
         li.appendChild(ul);
-
-        // Toggle child visibility on clicking the title
+        li.dataset.loaded = "false";
+        // Store a function on the li to load its children when needed.
+        li.loadChildren = function() {
+          if (li.dataset.loaded !== "true") {
+            node.children.forEach(childId => {
+              const childNode = mapping[childId];
+              if (childNode) {
+                ul.appendChild(createNodeElement(childNode, mapping));
+              }
+            });
+            li.dataset.loaded = "true";
+          }
+        };
+        // Toggle expansion on clicking the title.
         titleSpan.addEventListener('click', function(e) {
           e.stopPropagation();
+          li.loadChildren();
           ul.classList.toggle('hidden');
           li.classList.toggle('expanded');
         });
@@ -238,7 +351,7 @@
     function renderConversation(conversation, index) {
       const container = document.createElement('div');
       container.classList.add('conversation');
-      // Assign a unique id for navigation
+      // Set a unique id for the conversation.
       const convId = "conversation_" + index;
       container.id = convId;
 
@@ -246,19 +359,19 @@
       const header = document.createElement('h2');
       header.textContent = conversation.title || "Untitled Conversation";
       container.appendChild(header);
-
-      // Register conversation title in the sidebar (as a level‑1 header)
+      // Register the conversation header in the navigation as level‑1.
       registerNavItem(header.textContent, convId, 1);
 
-      // Display creation time if available.
+      // Display creation timestamp.
       if (conversation.create_time) {
         const timeInfo = document.createElement('p');
+        timeInfo.classList.add('timestamp');
         const date = new Date(conversation.create_time * 1000);
         timeInfo.textContent = "Created at: " + date.toLocaleString();
         container.appendChild(timeInfo);
       }
 
-      // Render the mapping tree if it exists.
+      // Render the mapping tree if available.
       if (conversation.mapping) {
         container.appendChild(renderMappingTree(conversation.mapping));
       } else {
@@ -270,21 +383,56 @@
     }
 
     /**
-     * Handles the file upload: reads the JSON file and renders the conversations
-     * and builds the sidebar navigation.
+     * Expands all nodes in the output (global expand functionality).
+     * Recursively loads children where needed and removes "hidden" classes.
      */
-    document.getElementById('fileInput').addEventListener('change', function(event) {
+    function expandAll() {
+      const toggles = document.querySelectorAll('#output li.toggle');
+      toggles.forEach(li => {
+        if (typeof li.loadChildren === "function") {
+          li.loadChildren();
+        }
+        const ul = li.querySelector('ul');
+        if (ul) {
+          ul.classList.remove('hidden');
+        }
+        li.classList.add('expanded');
+      });
+    }
+
+    /**
+     * Collapses all nodes in the output (global collapse functionality).
+     */
+    function collapseAll() {
+      const toggles = document.querySelectorAll('#output li.toggle');
+      toggles.forEach(li => {
+        const ul = li.querySelector('ul');
+        if (ul) {
+          ul.classList.add('hidden');
+        }
+        li.classList.remove('expanded');
+      });
+    }
+
+    // Attach listeners to the global expand/collapse buttons.
+    document.getElementById('expandAllButton').addEventListener('click', expandAll);
+    document.getElementById('collapseAllButton').addEventListener('click', collapseAll);
+
+    /**
+     * Handles the file upload: reads the JSON file, resets the navigation,
+     * renders the conversations, and builds the sidebar navigation.
+     */
+    document.getElementById('fileInput').addEventListener('change', function (event) {
       const file = event.target.files[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = function (e) {
           try {
-            // Parse the JSON file
+            // Parse the JSON file.
             const data = JSON.parse(e.target.result);
             const output = document.getElementById('output');
-            output.innerHTML = ""; // Clear previous content
-            // Clear the sidebar navigation
-            sidebarNavList.innerHTML = "";
+            output.innerHTML = ""; // Clear previous content.
+            resetNavStack(); // Clear and reinitialize the navigation.
 
             // If the JSON is an array, render each conversation; otherwise, render one.
             if (Array.isArray(data)) {
